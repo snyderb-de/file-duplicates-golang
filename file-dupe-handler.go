@@ -2,8 +2,11 @@ package main
 
 import (
 	"bufio"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	_ "fmt"
+	"io"
 	_ "io/fs"
 	"os"
 	_ "os"
@@ -12,7 +15,7 @@ import (
 	"sort"
 )
 
-func listFilesAndFolders(directory string, fileFormat string, descending bool) {
+func listFilesAndFolders(directory string, fileFormat string, descending bool) map[int64][]string {
 	// Create a map to store files by size
 	filesBySize := make(map[int64][]string)
 
@@ -52,8 +55,54 @@ func listFilesAndFolders(directory string, fileFormat string, descending bool) {
 			fmt.Println(path)
 		}
 	}
+
+	return filesBySize
 }
 
+// Hash files from ListFilesAndFolders using MD5
+func hashFiles(filesBySize map[int64][]string, dupeCheck bool) {
+	// Iterate through the filesBySize map
+	for size, files := range filesBySize {
+		fmt.Println(size, "bytes")
+
+		// Check if duplicate check is requested
+		if dupeCheck && len(files) > 1 {
+			filesByHash := make(map[string][]string)
+
+			// Hashing and grouping files by hash
+			for _, file := range files {
+				f, err := os.Open(file)
+				if err != nil {
+					fmt.Println("Error:", err)
+					continue
+				}
+				defer f.Close()
+
+				h := md5.New()
+				if _, err := io.Copy(h, f); err != nil {
+					fmt.Println("Error:", err)
+					continue
+				}
+
+				hash := hex.EncodeToString(h.Sum(nil))
+				filesByHash[hash] = append(filesByHash[hash], file)
+			}
+
+			// Print grouped files by hash
+			for hash, groupedFiles := range filesByHash {
+				fmt.Printf("Hash: %s\n", hash)
+				for i, file := range groupedFiles {
+					fmt.Printf("%d. %s\n", i+1, file)
+				}
+			}
+		} else {
+			// Print individual files if no duplicates
+			for _, file := range files {
+				fmt.Println(file)
+			}
+		}
+	}
+}
 func main() {
 	// Check if a command-line argument (root directory) is provided
 	if len(os.Args) < 2 {
@@ -90,5 +139,24 @@ func main() {
 	descending := sortingOption == "1"
 
 	// Call the listFilesAndFolders function to list files in the specified directory
-	listFilesAndFolders(directory, fileFormat, descending)
+	filesBySize := listFilesAndFolders(directory, fileFormat, descending)
+
+	// Read user input for duplicate check option
+	var dupeOption string
+	for {
+		fmt.Println("Check for duplicates?")
+		scanner.Scan()
+		dupeOption = scanner.Text()
+		if dupeOption == "Yes" || dupeOption == "No" {
+			break
+		} else {
+			fmt.Println("Wrong option")
+		}
+	}
+
+	// Determine if duplicate check should be performed
+	dupeCheck := dupeOption == "Yes"
+
+	// Call the hashFiles function to hash files from listFilesAndFolders
+	hashFiles(filesBySize, dupeCheck)
 }
