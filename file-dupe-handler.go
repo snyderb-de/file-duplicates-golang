@@ -1,7 +1,5 @@
 package main
 
-// Stage 2 working correctly
-
 import (
 	"bufio"
 	"fmt"
