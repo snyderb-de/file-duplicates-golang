@@ -61,48 +61,45 @@ func listFilesAndFolders(directory string, fileFormat string, descending bool) m
 
 // Hash files from ListFilesAndFolders using MD5
 func hashFiles(filesBySize map[int64][]string, dupeCheck bool) {
-	// Iterate through the filesBySize map
-	for size, files := range filesBySize {
-		fmt.Println(size, "bytes")
+	if dupeCheck {
+		for size, files := range filesBySize {
+			if len(files) > 1 {
+				filesByHash := make(map[string][]string)
 
-		// Check if duplicate check is requested
-		if dupeCheck && len(files) > 1 {
-			filesByHash := make(map[string][]string)
+				// Hashing and grouping files by hash
+				for _, file := range files {
+					f, err := os.Open(file)
+					if err != nil {
+						fmt.Println("Error:", err)
+						continue
+					}
+					defer f.Close()
 
-			// Hashing and grouping files by hash
-			for _, file := range files {
-				f, err := os.Open(file)
-				if err != nil {
-					fmt.Println("Error:", err)
-					continue
+					h := md5.New()
+					if _, err := io.Copy(h, f); err != nil {
+						fmt.Println("Error:", err)
+						continue
+					}
+
+					hash := hex.EncodeToString(h.Sum(nil))
+					filesByHash[hash] = append(filesByHash[hash], file)
 				}
-				defer f.Close()
 
-				h := md5.New()
-				if _, err := io.Copy(h, f); err != nil {
-					fmt.Println("Error:", err)
-					continue
+				// Check and print only if there are duplicates
+				for hash, groupedFiles := range filesByHash {
+					if len(groupedFiles) > 1 {
+						fmt.Printf("\n%d bytes\n", size)
+						fmt.Printf("Hash: %s\n", hash)
+						for i, file := range groupedFiles {
+							fmt.Printf("%d. %s\n", i+1, file)
+						}
+					}
 				}
-
-				hash := hex.EncodeToString(h.Sum(nil))
-				filesByHash[hash] = append(filesByHash[hash], file)
-			}
-
-			// Print grouped files by hash
-			for hash, groupedFiles := range filesByHash {
-				fmt.Printf("Hash: %s\n", hash)
-				for i, file := range groupedFiles {
-					fmt.Printf("%d. %s\n", i+1, file)
-				}
-			}
-		} else {
-			// Print individual files if no duplicates
-			for _, file := range files {
-				fmt.Println(file)
 			}
 		}
 	}
 }
+
 func main() {
 	// Check if a command-line argument (root directory) is provided
 	if len(os.Args) < 2 {
