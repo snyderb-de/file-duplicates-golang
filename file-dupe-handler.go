@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	_ "path/filepath"
 	"sort"
+	"strings"
 )
 
 func listFilesAndFolders(directory string, fileFormat string, descending bool) map[int64][]string {
@@ -42,9 +43,11 @@ func listFilesAndFolders(directory string, fileFormat string, descending bool) m
 	for size := range filesBySize {
 		sizes = append(sizes, size)
 	}
+
 	if descending {
 		sort.Slice(sizes, func(i, j int) bool { return sizes[i] > sizes[j] })
 	} else {
+		// This is the ascending order sorting
 		sort.Slice(sizes, func(i, j int) bool { return sizes[i] < sizes[j] })
 	}
 
@@ -54,53 +57,83 @@ func listFilesAndFolders(directory string, fileFormat string, descending bool) m
 		for _, path := range filesBySize[size] {
 			fmt.Println(path)
 		}
+		fmt.Println() // new line for grouping
 	}
 
 	return filesBySize
 }
 
 // Hash files from ListFilesAndFolders using MD5
-func hashFiles(filesBySize map[int64][]string, dupeCheck bool) {
+func hashFile(file string) (string, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			// Update err if no previous error has been encountered
+			err = cerr
+		}
+	}()
+
+	h := md5.New()
+	if _, err = io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), err
+}
+
+func hashFiles(filesBySize map[int64][]string, dupeCheck bool, descending bool) {
 	if dupeCheck {
-		for size, files := range filesBySize {
+		sizes := make([]int64, 0, len(filesBySize))
+		for size := range filesBySize {
+			sizes = append(sizes, size)
+		}
+
+		if descending {
+			sort.Slice(sizes, func(i, j int) bool { return sizes[i] > sizes[j] })
+		} else {
+			sort.Slice(sizes, func(i, j int) bool { return sizes[i] < sizes[j] })
+		}
+
+		globalFileCounter := 1 // Initialize a global counter for continuous numbering
+
+		for _, size := range sizes {
+			files := filesBySize[size]
 			if len(files) > 1 {
 				filesByHash := make(map[string][]string)
 
-				// Hashing and grouping files by hash
 				for _, file := range files {
-					f, err := os.Open(file)
+					hash, err := hashFile(file)
 					if err != nil {
 						fmt.Println("Error:", err)
 						continue
 					}
-					defer f.Close()
 
-					h := md5.New()
-					if _, err := io.Copy(h, f); err != nil {
-						fmt.Println("Error:", err)
-						continue
-					}
-
-					hash := hex.EncodeToString(h.Sum(nil))
 					filesByHash[hash] = append(filesByHash[hash], file)
 				}
 
-				// Check and print only if there are duplicates
+				fmt.Printf("%d bytes\n", size) // Print size once for each group
 				for hash, groupedFiles := range filesByHash {
 					if len(groupedFiles) > 1 {
-						fmt.Printf("\n%d bytes\n", size)
 						fmt.Printf("Hash: %s\n", hash)
-						for i, file := range groupedFiles {
-							fmt.Printf("%d. %s\n", i+1, file)
+						for _, file := range groupedFiles {
+							fmt.Printf("%d. %s\n", globalFileCounter, file)
+							globalFileCounter++ // global counter
 						}
 					}
 				}
+				fmt.Println() // Add newline after each size group
 			}
 		}
 	}
 }
 
 func main() {
+	// Declare normalizedInput outside the for loop
+	var normalizedInput string
+
 	// Check if a command-line argument (root directory) is provided
 	if len(os.Args) < 2 {
 		fmt.Println("Directory is not specified")
@@ -141,19 +174,22 @@ func main() {
 	// Read user input for duplicate check option
 	var dupeOption string
 	for {
-		fmt.Println("Check for duplicates?")
+		fmt.Println("Check for duplicates? (Yes/No)")
 		scanner.Scan()
 		dupeOption = scanner.Text()
-		if dupeOption == "Yes" || dupeOption == "No" {
+		normalizedInput = strings.ToLower(dupeOption) // Normalize input to lowercase
+		if normalizedInput == "yes" || normalizedInput == "no" {
 			break
 		} else {
-			fmt.Println("Wrong option")
+			fmt.Println("Wrong option, please enter Yes or No")
 		}
 	}
 
 	// Determine if duplicate check should be performed
-	dupeCheck := dupeOption == "Yes"
+	dupeCheck := normalizedInput == "yes"
 
 	// Call the hashFiles function to hash files from listFilesAndFolders
-	hashFiles(filesBySize, dupeCheck)
+	if dupeCheck {
+		hashFiles(filesBySize, dupeCheck, descending)
+	}
 }
