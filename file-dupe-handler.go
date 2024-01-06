@@ -115,9 +115,10 @@ func hashFiles(filesBySize map[int64][]string, dupeCheck bool, descending bool) 
 				filesByHash[hash] = append(filesByHash[hash], file)
 			}
 
+			fmt.Printf("%d bytes\n", size) // Print size once for each group
 			for hash, groupedFiles := range filesByHash {
 				if len(groupedFiles) > 1 {
-					fmt.Printf("%d bytes\nHash: %s\n", size, hash)
+					fmt.Printf("Hash: %s\n", hash)
 					for _, file := range groupedFiles {
 						fmt.Printf("%d. %s\n", globalFileCounter, file)
 						allFiles = append(allFiles, file)
